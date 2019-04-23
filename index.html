@@ -1,0 +1,235 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN"
+   "http://www.w3.org/TR/html4/strict.dtd">
+
+<html lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<title></title>
+	<meta name="generator" content="TextMate http://macromates.com/">
+	<meta name="author" content="Stephan Müller">
+	<link rel="stylesheet" href="css/spacetime.css" type="text/css" charset="utf-8">
+	<script type="text/javascript" src="js/d3.min.js" charset="utf-8"></script>
+	<script type="text/javascript" src="js/workerQueue.js" charset="utf-8"></script>
+	<script type="text/javascript" src="js/pixelmap.js" charset="utf-8"></script>
+	<script type="text/javascript" src="js/classifier.js" charset="utf-8"></script>
+	<script type="text/javascript" src="js/timeline.js" charset="utf-8"></script>
+	<script type="text/javascript" src="js/spacetime.js" charset="utf-8"></script>
+	<style type="text/css">
+		#input {display: none !important}
+		#_map {display: none !important}
+		#_brush {display: none !important}
+		canvas {
+			image-rendering:optimizeSpeed;             /* Legal fallback */
+			image-rendering:-moz-crisp-edges;          /* Firefox        */
+			image-rendering:-o-crisp-edges;            /* Opera          */
+			image-rendering:-webkit-optimize-contrast; /* Safari         */
+			image-rendering:optimize-contrast;         /* CSS3 Proposed  */
+			image-rendering:crisp-edges;               /* CSS4 Proposed  */
+			image-rendering:pixelated;                 /* CSS4 Proposed  */
+			-ms-interpolation-mode:nearest-neighbor;   /* IE8+           */
+		}
+		body {
+			font-size: 18px;
+			-margin-left: 200px;
+			-margin-top: 100px;
+		}
+		#brush .extent {
+		  stroke: #222;
+		  fill-opacity: .3;
+		  shape-rendering: crispEdges;
+		}
+		#brush {
+		  background: #eee;
+		}
+	</style>
+</head>
+<body>
+
+<h1>MapMiner</h1>
+<p><a href="https://github.com/stepmuel/mapminer">Documentation</a></p>
+
+<div>
+	<input type="file" id="input">
+</div>
+
+<svg style="height: 40px; width: 1024px;" id="timelabel"></svg>
+<svg style="height: 20px; width: 1024px;" id="brush"></svg>
+<div id="timezoom" style="border: 0px solid #000; width: 1024px;">
+	<div id="timebars" style="width: 1024px;"></div>
+</div>
+<br>
+<div id="map"></div>
+
+<script type="text/javascript" charset="utf-8">
+  var urlParams = new URLSearchParams(window.location.search);
+	var dataPath = urlParams.get("dataURL") || "data/spacetime.json";
+	var mapWidth = 1024;
+	var map = new PixelMap(mapWidth, 512, document.getElementById("map"));
+	var wq = null; // worker queue
+	var classifier = null;
+	var timeScale = null;
+	var brush, gBrush;
+	var canvas = map.addLayer("pos");
+	canvas.className = "pixelated";
+	
+	var classOrder = ["b", "m", "f", "e", "i"];
+	classOrder = ["b", "m", "f", "e"];
+	var classColors = {b:"#2ca02c",m:"#ff7f0e",f:"#d62728",e:"#1f77b4",i:"#c7c7c7"};
+	
+	// load data
+	var data = null;
+	var classes = null;
+	var inputElement = document.getElementById("input").addEventListener("change", handleFiles, false);;
+	function handleFiles() {
+		var input = this.files[0];
+		if (input.type!="application/json") return;
+		var reader = new FileReader();
+		reader.onloadend = function () {
+			data = JSON.parse(reader.result);
+			newData();
+		}
+		reader.readAsBinaryString(input);
+	}
+	d3.json(dataPath, function(error, json) {
+		if (error) return console.warn(error);
+		data = json;
+		newData();
+	});
+	d3.json("data/classes.json", function(error, json) {
+		if (error) return console.warn(error);
+		classes = json;
+		newData();
+	});
+	var info = {};
+	var timeLines = [];
+	function newData() {
+		if (data==null) return;
+		if (classes==null) return;
+		console.log("data ready");
+		var startTime = new Date().getTime();
+		classifier = new Classifier(classes, data.enum, data.step);
+		classifier.addCls(data.timeline);
+		console.log("classify dt: " + (new Date().getTime() - startTime));
+		wq = createWorkerQueue();
+		wq.worker.dataString = JSON.stringify(data);
+		updateMap();
+		// prepare timelines
+		var times = Object.keys(data.timeline);
+		info.tMin = Math.min.apply(null, times);
+		info.tMax = Math.max.apply(null, times);
+		var nActive = {};
+		var nMax = 0;
+		for (var time in data.timeline) {
+			var n = Object.keys(data.timeline[time]).length;
+			nActive[time] = n;
+			nMax = Math.max(nMax, n);
+		}
+		info.nActive = nActive;
+		info.nMax = nMax;
+		console.log("nMax: "+nMax);
+		
+		// create timeline bars
+		var timebars = document.getElementById("timebars");
+		while (timebars.firstChild) {
+		    timebars.removeChild(timebars.firstChild);
+		}
+		var tl;
+		
+		tl = new WaveTimeLine(info.tMin, info.tMax, data.step);
+		timeLines.push(tl);
+		tl.width = mapWidth;
+		tl.height = 80;
+		// nMax = 5;
+		tl.amplitude = function (v) {return v/nMax;};
+		// tl.amplitude = function (v) {return 1;};
+		// tl.color = function (v) {return d3.hsl(128, 0.5, 1-v/(nMax+4)).toString();};
+		tl.color = function (v) {return "#00F";};
+		tl.setData(nActive, data.step);
+		timebars.appendChild(tl.canvas);
+		
+		tl = new EnumTimeLine(info.tMin, info.tMax, data.step);
+		timeLines.push(tl);
+		tl.width = mapWidth;
+		tl.height = 60;
+		tl.valueMap = function (v) {
+			var p = v["2"];
+			if (p===undefined) return null;
+			return p["cls"];
+		};
+		tl.colors = classColors;
+		tl.values = classOrder;
+		tl.setData(data.timeline, data.step);
+		// timebars.appendChild(tl.canvas); // classifications for single player
+		
+		brush = d3.svg.brush()
+			// .x(timeScale)
+			// .extent([new Date(info.tMin), new Date(info.tMax)]);
+			.on("brush", function () {
+				updateMap(brush.extent())
+			});
+			// .on("brushend", brushended);
+		// gBrush = d3.select("#brush").append("g")
+		// 		.attr("class", "brush");
+		
+		gBrush = d3.select("#brush");
+		
+		updateTimeFrame(info.tMin, info.tMax);
+		
+		gBrush.selectAll("rect")
+				.attr("height", 20);
+	}
+	
+	function updateTimeFrame(start, end) {
+		timeLines.forEach(function (tl) {
+			tl.plot(start, end);
+		});
+		timeScale = d3.time.scale()
+			.domain([new Date(start), new Date(end)])
+			.range([0, mapWidth]);
+		// console.log(timeScale.ticks(10));
+		var label = d3.select("#timelabel");
+		label.selectAll("*").remove();
+		label.append("g")
+				.attr("class", "x axis")
+				.attr("transform", "translate(0,30)")
+				.call(d3.svg.axis()
+					.scale(timeScale)
+					.orient("top")
+					.ticks(8)
+					.tickPadding(5))
+			.selectAll("text")
+				// .attr("x", 6)
+				//.attr("y", 2)
+				.style("text-anchor", "middle");
+		
+		// gBrush.selectAll("*").remove();
+		// gBrush.remove();
+		brush.x(timeScale); //.extent([new Date(start+100000), new Date(end-100000)]);;
+		gBrush.call(brush);
+		brush.extent(brush.extent());
+		
+	}
+	
+	// interactivity
+	
+	d3.select("#map").call(d3.behavior.zoom().scaleExtent([0.1, 10]).on("zoom", function () {
+		//console.log(d3.event.translate);
+		//console.log(d3.event.scale);
+		map.scale = d3.event.scale;
+		map.translate = [d3.event.translate[0], d3.event.translate[1]];
+		map.placeImageData();
+		updateMap(brush.extent());
+		// updateMap();
+	}));
+	
+	d3.select("#timezoom").call(d3.behavior.zoom().scaleExtent([-Infinity, Infinity]).on("zoom", function () {
+		var scale = d3.event.scale;
+		var offset = d3.event.translate[0];
+		var start = info.tMin - offset/mapWidth*(info.tMax-info.tMin)/scale;
+		var end = start + (info.tMax-info.tMin)/scale;
+		updateTimeFrame(start, end);
+	}));
+</script>
+
+</body>
+</html>
