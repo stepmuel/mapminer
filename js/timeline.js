@@ -29,14 +29,16 @@ function WaveTimeLine () {
 		var ctx = this.canvas.getContext("2d");
 		ctx.clearRect(0, 0, w, h);
 		ctx.save();
-		ctx.scale(w/(end-start)*step, 1);
+    var s = w/(end-start)*step;
+		ctx.scale(s, 1);
+    var dx = s > 0.01 ? 1 : 1/(s*100);
 		for (var t in this.data) {
 			if (t<start-step||t>end) continue;
 			var v = data[t];
 			var dy = a(v)*h;
 			var x = (t-start)/step;
 			ctx.fillStyle = c(v);
-			ctx.fillRect(x, (h-dy)/2, 1, dy);
+			ctx.fillRect(x, (h-dy)/2, dx, dy);
 		}
 		ctx.restore();
 	};
@@ -61,7 +63,9 @@ function EnumTimeLine () {
 		ctx.imageSmoothingEnabled = false;
 		ctx.clearRect(0, 0, w, h);
 		ctx.save();
-		ctx.scale(w/(end-start)*step, 1);
+    var s = w/(end-start)*step;
+		ctx.scale(s, 1);
+    var dx = s > 0.01 ? 1 : 1/(s*100);
 		for (var t in this.data) {
 			if (t<start-step||t>end) continue;
 			var v = this.valueMap(data[t]);
@@ -70,7 +74,7 @@ function EnumTimeLine () {
 			if (i===undefined) continue;
 			var x = (t-start)/step;
 			ctx.fillStyle = this.colors[v];
-			ctx.fillRect(x, i*h/nValues, 1, h/nValues);
+			ctx.fillRect(x, i*h/nValues, dx, h/nValues);
 			// ctx.fillRect(x, 0, 1, h);
 		}
 		ctx.restore();
