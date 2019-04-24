@@ -2,7 +2,7 @@
 
 MapMiner enables interactive visualization and exploration of temporal and spatial data. A map displays a heat map of locations for a time span selected on the timeline. Features like scrubbing, dragging and scroll wheel zoom for both map and timeline make diving into big datasets intuitive and fun.
 
-MapMiner was developed as part of the [HeapCraft project](https://heapcraft.net/). The project site features an interactive demos of MapMiner with Minecraft player data: [demo1](https://heapcraft.net/mapminer/) (3.4MB), [demo2](https://heapcraft.net/mapminer/?dataURL=data/hc.json) (18.8MB).
+MapMiner was developed as part of the [HeapCraft project](https://heapcraft.net/). The project site features an interactive demos of MapMiner with Minecraft player data: [demo1](https://heapcraft.net/mapminer/) (3.4MB), [demo2](https://heapcraft.net/mapminer/?dataURL=data/hc.json) (18.8MB). The demos might take a few seconds to load.
 
 The project was developed as part of a [master's thesis](http://heapcraft.net/?p=research) to explore data and create visualizations. Many features are undocumented and not exposed to the user. Most of them can be found in comments inside the source code.
 
