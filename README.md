@@ -6,6 +6,8 @@ MapMiner was developed as part of the [HeapCraft project](https://heapcraft.net/
 
 The project was developed as part of a [master's thesis](http://heapcraft.net/?p=research) to explore data and create visualizations. Many features are undocumented and not exposed to the user. Most of them can be found in comments inside the source code.
 
+MapMiner uses [WorkerQueue](https://github.com/stepmuel/WorkerQueue) for processing large amounts of data in a background thread without blocking the UI.
+
 ![MapMiner Screenshot](https://heapcraft.net/mapminer/screenshot.png)
 
 ## Data Format
